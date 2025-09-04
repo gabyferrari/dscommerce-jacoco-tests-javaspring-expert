@@ -68,6 +68,31 @@ public class ProductControllerIT {
 	}
 	
 	@Test
+	public void findByIdShouldReturnProductDTOWhenIdExists() throws Exception {
+		
+		ResultActions result = 
+				mockMvc.perform(get("/products/{id}", existingId)
+					.accept(MediaType.APPLICATION_JSON));
+		
+		result.andExpect(status().isOk());
+		result.andExpect(jsonPath("$.id").value(2L));
+		result.andExpect(jsonPath("$.name").value("Smart TV"));
+		result.andExpect(jsonPath("$.description").value("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."));
+		result.andExpect(jsonPath("$.price").value(2190.0));
+		result.andExpect(jsonPath("$.categories").exists());
+	}
+	
+	@Test
+	public void findByIdShouldReturnNotFoundWhenIdDoesNotExist() throws Exception {
+		
+		ResultActions result = 
+				mockMvc.perform(get("/products/{id}", nonExistingId)
+					.accept(MediaType.APPLICATION_JSON));
+		
+		result.andExpect(status().isNotFound());
+	}
+	
+	@Test
 	public void findAllShouldReturnPageWhenNameParamIsNotEmpty() throws Exception {
 		ResultActions result = mockMvc
 				.perform(get("/products?name={productName}", productName)
