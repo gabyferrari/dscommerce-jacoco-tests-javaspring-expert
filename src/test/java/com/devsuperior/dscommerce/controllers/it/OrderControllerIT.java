@@ -1,6 +1,7 @@
 package com.devsuperior.dscommerce.controllers.it;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -43,8 +44,8 @@ public class OrderControllerIT {
 	private ObjectMapper objMapper;
 	
 	private Long existingId, nonExistingId;
-	private String adminUsername, adminPassword, clientUsername, clientPassword;
-	private String adminToken, clientToken, invalidToken;
+	private String adminUsername, adminPassword, adminOnlyUsername, adminOnlyPassword, clientUsername, clientPassword;
+	private String adminToken, adminOnlyToken, clientToken, invalidToken;
 	private Order order;
 	private OrderDTO orderDto;
 	private User user;
@@ -56,18 +57,24 @@ public class OrderControllerIT {
 		
 		adminUsername = "alex@gmail.com";
 		adminPassword = "123456";
+		adminOnlyUsername = "ana@gmail.com";
+		adminOnlyPassword = "123456";
 		clientUsername = "maria@gmail.com";
 		clientPassword = "123456";
 		
 		adminToken = tokenUtil.obtainAccessToken(mockMvc, adminUsername, adminPassword);
+		adminOnlyToken = tokenUtil.obtainAccessToken(mockMvc, adminOnlyUsername, adminOnlyPassword);
 		clientToken = tokenUtil.obtainAccessToken(mockMvc, clientUsername, clientPassword);
 		invalidToken = adminToken + "xpto";
 		
 		user = UserFactory.createClientUser();
 		order = new Order(null, Instant.now(), OrderStatus.WAITING_PAYMENT, user, null);
+		
 		Product product = ProductFactory.createProduct();
 		OrderItem orderItem = new OrderItem(order, product, 2, 10.0);
 		order.getItems().add(orderItem);
+		
+		orderDto = new OrderDTO(order);
 		
 	}
 	
@@ -127,8 +134,7 @@ public class OrderControllerIT {
 		ResultActions result = mockMvc
 				.perform(get("/orders/{id}", nonExistingId)
 						.header("Authorization", "Bearer " + adminToken)
-						.accept(MediaType.APPLICATION_JSON))
-						.andDo(MockMvcResultHandlers.print());
+						.accept(MediaType.APPLICATION_JSON));
 		
 		result.andExpect(status().isNotFound());
 	}
@@ -138,8 +144,7 @@ public class OrderControllerIT {
 		ResultActions result = mockMvc
 				.perform(get("/orders/{id}", nonExistingId)
 						.header("Authorization", "Bearer " + clientToken)
-						.accept(MediaType.APPLICATION_JSON))
-						.andDo(MockMvcResultHandlers.print());
+						.accept(MediaType.APPLICATION_JSON));
 		
 		result.andExpect(status().isNotFound());
 	}
@@ -149,10 +154,73 @@ public class OrderControllerIT {
 		ResultActions result = mockMvc
 				.perform(get("/orders/{id}", existingId)
 						.header("Authorization", "Bearer " + invalidToken)
-						.accept(MediaType.APPLICATION_JSON))
-						.andDo(MockMvcResultHandlers.print());
+						.accept(MediaType.APPLICATION_JSON));
 		
 		result.andExpect(status().isUnauthorized());
 	}
+	
+	@Test
+	public void insertShouldReturnOrderDTOCreatedWhenClientLogged() throws Exception {
+		String jsonBody = objMapper.writeValueAsString(orderDto);
+		
+		ResultActions result = mockMvc
+				.perform(post("/orders")
+						.header("Authorization", "Bearer " + clientToken)
+						.content(jsonBody)
+						.contentType(MediaType.APPLICATION_JSON)
+						.accept(MediaType.APPLICATION_JSON))
+						.andDo(MockMvcResultHandlers.print());
+		
+		result.andExpect(status().isCreated());
+		result.andExpect(jsonPath("$.id").value(4L));
+		result.andExpect(jsonPath("$.moment").exists());
+		result.andExpect(jsonPath("$.status").value("WAITING_PAYMENT"));
+		result.andExpect(jsonPath("$.client").exists());
+		result.andExpect(jsonPath("$.items").exists());
+		result.andExpect(jsonPath("$.total").exists());
+	}
+	
+	@Test
+	public void insertShouldReturnUnprocessableEntityWhenClientLoggedAndOrderHasNoItem() throws Exception {
+		orderDto.getItems().clear();
+		
+		String jsonBody = objMapper.writeValueAsString(orderDto);
+		
+		ResultActions result = mockMvc
+				.perform(post("/orders")
+						.header("Authorization", "Bearer " + clientToken)
+						.content(jsonBody)
+						.contentType(MediaType.APPLICATION_JSON)
+						.accept(MediaType.APPLICATION_JSON));
+		
+		result.andExpect(status().isUnprocessableEntity());
+	}
+	
+	@Test
+	public void insertShouldReturnForbiddenWhenAdminLogged() throws Exception {
+		String jsonBody = objMapper.writeValueAsString(orderDto);
+		
+		ResultActions result = mockMvc
+				.perform(post("/orders")
+						.header("Authorization", "Bearer " + adminOnlyToken)
+						.content(jsonBody)
+						.contentType(MediaType.APPLICATION_JSON)
+						.accept(MediaType.APPLICATION_JSON));
+		
+		result.andExpect(status().isForbidden());
+	}
 
+	@Test
+	public void insertShouldReturnUnauthorizedWhenInvalidToken() throws Exception {
+		String jsonBody = objMapper.writeValueAsString(orderDto);
+		
+		ResultActions result = mockMvc
+				.perform(post("/orders")
+						.header("Authorization", "Bearer " + invalidToken)
+						.content(jsonBody)
+						.contentType(MediaType.APPLICATION_JSON)
+						.accept(MediaType.APPLICATION_JSON));
+		
+		result.andExpect(status().isUnauthorized());
+	}
 }
